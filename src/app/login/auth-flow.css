@@ -1,0 +1,224 @@
+.auth-stage {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #f5f1ea;
+  color: #171411;
+  transition:
+    opacity 700ms ease,
+    transform 700ms ease,
+    filter 700ms ease;
+}
+
+.auth-stage-exit {
+  opacity: 0;
+  transform: scale(1.01);
+  filter: blur(10px);
+}
+
+.auth-stage-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.auth-stage-mark {
+  margin-bottom: 2rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  color: rgba(23, 20, 17, 0.64);
+}
+
+.auth-copy-wrap {
+  will-change: opacity, transform;
+  transition:
+    opacity 680ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 680ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.auth-copy-hidden {
+  opacity: 0;
+  transform: translateY(18px);
+}
+
+.auth-stage-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.9ch;
+  max-width: 16ch;
+  font-size: clamp(2.6rem, 7vw, 5.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+
+.auth-stage-title-compact {
+  max-width: none;
+}
+
+.auth-stage-title-inline {
+  flex-wrap: nowrap;
+  max-width: none;
+}
+
+.auth-stage-title-copy {
+  max-width: 18ch;
+  font-size: clamp(2.1rem, 5vw, 3.3rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+
+.auth-inline-slot {
+  display: inline-flex;
+  min-width: 4.75ch;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1.5px solid rgba(23, 20, 17, 0.18);
+  transition:
+    border-color 200ms ease,
+    color 200ms ease;
+}
+
+.auth-inline-slot-error {
+  border-color: rgba(185, 61, 61, 0.72);
+  color: #b93d3d;
+}
+
+.auth-inline-input {
+  border: 0;
+  background: transparent;
+  padding: 0 0 0.08em;
+  text-align: center;
+  font: inherit;
+  letter-spacing: 0.01em;
+  color: inherit;
+  outline: none;
+}
+
+.auth-stage-ascii {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: clamp(1rem, 1.9vw, 1.18rem);
+  line-height: 1.22;
+  color: rgba(23, 20, 17, 0.8);
+  white-space: pre;
+}
+
+.auth-inline-input::placeholder {
+  color: rgba(23, 20, 17, 0.22);
+}
+
+.auth-inline-slot-error .auth-inline-input::placeholder {
+  color: rgba(185, 61, 61, 0.42);
+}
+
+.auth-inline-input:-webkit-autofill,
+.auth-inline-input:-webkit-autofill:hover,
+.auth-inline-input:-webkit-autofill:focus,
+.auth-inline-input:-webkit-autofill:active {
+  -webkit-text-fill-color: #171411;
+  -webkit-box-shadow: 0 0 0 1000px #f5f1ea inset;
+  box-shadow: 0 0 0 1000px #f5f1ea inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
+.auth-stage-form {
+  margin-top: 1.5rem;
+  display: flex;
+  min-height: 4.5rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.auth-stage-error {
+  margin: 0 0 0.7rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: rgba(102, 39, 39, 0.86);
+}
+
+.auth-stage-error-spacer {
+  height: 2rem;
+}
+
+.auth-stage-hint {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(23, 20, 17, 0.5);
+}
+
+.auth-stage-hint-line {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.auth-stage-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.2rem;
+  padding: 0.38rem 0.56rem;
+  border: 1px solid rgba(23, 20, 17, 0.18);
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 6px 16px -12px rgba(23, 20, 17, 0.28);
+  color: rgba(23, 20, 17, 0.72);
+  letter-spacing: 0.12em;
+}
+
+@media (max-width: 640px) {
+  .auth-stage-title {
+    max-width: 10ch;
+  }
+
+  .auth-stage-title-inline {
+    gap: 0.65ch;
+    font-size: clamp(2.2rem, 9vw, 3.6rem);
+  }
+
+  .auth-stage-title-copy {
+    max-width: 12ch;
+  }
+
+  .auth-stage-hint {
+    right: 1rem;
+    bottom: 1rem;
+    font-size: 0.64rem;
+  }
+
+  .auth-stage-key {
+    min-width: 2.7rem;
+    padding: 0.34rem 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-stage,
+  .auth-copy-wrap {
+    animation: none;
+    transition: none;
+  }
+}
