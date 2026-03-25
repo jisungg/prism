@@ -3,23 +3,32 @@ import {
   buildErrorRedirect,
   createSession,
   createUser,
-  provisionalEmailForUsername,
 } from "@/lib/auth";
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
 export async function POST(request: Request) {
   const contentType = request.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
     const body = (await request.json()) as {
+      email?: string;
       username?: string;
       password?: string;
     };
 
+    const email = String(body.email ?? "").trim();
     const username = String(body.username ?? "").trim();
     const password = String(body.password ?? "");
 
-    if (!username || !password) {
-      return NextResponse.json({ error: "Finish each step to continue." }, { status: 400 });
+    if (!email || !username || !password) {
+      return NextResponse.json({ error: "Fill in each field to continue." }, { status: 400 });
+    }
+
+    if (!isValidEmail(email)) {
+      return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
     }
 
     if (username.length < 3) {
@@ -32,6 +41,7 @@ export async function POST(request: Request) {
 
     try {
       const user = await createUser({
+        email,
         username,
         password,
       });
@@ -54,12 +64,20 @@ export async function POST(request: Request) {
   }
 
   const formData = await request.formData();
+  const email = String(formData.get("email") ?? "").trim();
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
-  if (!username || !password) {
+  if (!email || !username || !password) {
     return NextResponse.redirect(
       new URL(buildErrorRedirect("/register", "Fill in all fields."), request.url),
+      { status: 303 },
+    );
+  }
+
+  if (!isValidEmail(email)) {
+    return NextResponse.redirect(
+      new URL(buildErrorRedirect("/register", "Enter a valid email address."), request.url),
       { status: 303 },
     );
   }
@@ -80,7 +98,7 @@ export async function POST(request: Request) {
 
   try {
     const user = await createUser({
-      email: provisionalEmailForUsername(username),
+      email,
       username,
       password,
     });

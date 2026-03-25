@@ -9,23 +9,18 @@ type SubmitStatus = {
   error?: string;
 };
 
-const USER_MOVES = ["e2→e4", "d2→d4", "c2→c4", "f2→f3", "g2→g3"];
-const PASS_MOVES = ["Ng1→f3", "Bc1→e3", "Qd1→h5", "Rd1→d4", "Ke1→g1"];
 const SUCCESS_OVERLAY_DELAY_MS = 900;
 const DASHBOARD_REDIRECT_MS = 2400;
 
-export function AuthFlow() {
+export function RegisterFlow() {
   const router = useRouter();
   const timeoutIdsRef = useRef<number[]>([]);
   const [isBusy, setIsBusy] = useState(false);
   const [isSuccessVisible, setIsSuccessVisible] = useState(false);
+  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [hasAuthError, setHasAuthError] = useState(false);
-  const [ghostUserMove, setGhostUserMove] = useState("");
-  const [ghostPassMove, setGhostPassMove] = useState("");
-  const [userMoveIndex, setUserMoveIndex] = useState(0);
-  const [passMoveIndex, setPassMoveIndex] = useState(0);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     return () => {
@@ -39,13 +34,13 @@ export function AuthFlow() {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Enter") {
         event.preventDefault();
-        void handleLogin();
+        void handleRegister();
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isBusy, isSuccessVisible, username, password]);
+  }, [email, username, password, isBusy, isSuccessVisible]);
 
   function rememberTimeout(callback: () => void, delay: number) {
     const timeoutId = window.setTimeout(() => {
@@ -71,25 +66,23 @@ export function AuthFlow() {
     }, DASHBOARD_REDIRECT_MS);
   }
 
-  async function submit(endpoint: "/api/auth/login" | "/api/auth/register") {
-    const trimmedUsername = username.trim();
-    setHasAuthError(false);
-
-    if (!trimmedUsername || !password) {
-      setHasAuthError(true);
+  async function handleRegister() {
+    if (isBusy || isSuccessVisible) {
       return;
     }
 
+    setErrorMessage("");
     setIsBusy(true);
 
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          username: trimmedUsername,
+          email: email.trim(),
+          username: username.trim(),
           password,
         }),
       });
@@ -97,62 +90,32 @@ export function AuthFlow() {
       const result = (await response.json()) as SubmitStatus;
 
       if (!response.ok) {
-        setHasAuthError(true);
+        setErrorMessage(result.error ?? "Could not create your account.");
         return;
       }
 
       triggerSuccess();
     } catch {
-      setHasAuthError(true);
+      setErrorMessage("Could not create your account.");
     } finally {
       setIsBusy(false);
     }
   }
 
-  async function handleLogin() {
-    if (isBusy || isSuccessVisible) {
-      return;
-    }
-
-    await submit("/api/auth/login");
-  }
-
-  function onUsernameChange(value: string) {
-    setUsername(value);
-    setHasAuthError(false);
-
-    if (!value) {
-      setGhostUserMove("");
-      return;
-    }
-
-    setGhostUserMove(USER_MOVES[userMoveIndex % USER_MOVES.length]);
-    setUserMoveIndex((current) => current + 1);
-  }
-
-  function onPasswordChange(value: string) {
-    setPassword(value);
-    setHasAuthError(false);
-
-    if (!value) {
-      setGhostPassMove("");
-      return;
-    }
-
-    setGhostPassMove(PASS_MOVES[passMoveIndex % PASS_MOVES.length]);
-    setPassMoveIndex((current) => current + 1);
-  }
+  const hasError = Boolean(errorMessage);
 
   return (
     <main className="min-h-screen bg-[#f7f7f5] text-[var(--color-ink)]">
       <div className="mx-auto grid min-h-screen max-w-[1180px] items-center gap-24 px-8 py-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:px-12 lg:py-20">
         <section className="animate-[rise-in_720ms_cubic-bezier(0.2,0.7,0.2,1)_both] self-center">
           <div className="max-w-[33rem]">
-            <h1 className="max-w-[12ch] text-[clamp(3rem,7vw,5.25rem)] leading-[0.94] tracking-[-0.045em] text-[#0f1014] text-balance">
-              A clean workspace for serious chess preparation.
+            <h1 className="max-w-[11ch] text-[clamp(3rem,7vw,5.25rem)] leading-[0.94] tracking-[-0.045em] text-[#0f1014] text-balance">
+              Create the workspace behind your prep.
             </h1>
             <p className="mt-6 max-w-[30rem] text-[1.05rem] leading-[1.7] text-[var(--color-muted)]">
-              Welcome back to Prism. Continue your prep.
+              Welcome to Prism. Study opponents, review tendencies, and prepare
+              openings with a workspace built for reports, repertoire work, and
+              game-level analysis.
             </p>
           </div>
         </section>
@@ -163,63 +126,79 @@ export function AuthFlow() {
               <div className="relative">
                 <label
                   className="block text-[0.76rem] font-medium tracking-[-0.01em] text-black/42"
-                  htmlFor="inp-user"
+                  htmlFor="register-email"
                 >
-                  Username
+                  Email
                 </label>
                 <input
-                  id="inp-user"
+                  id="register-email"
                   className={[
                     "mt-3 block w-full border-0 border-b bg-transparent px-0 pb-3 text-[1.15rem] tracking-[-0.03em] text-[var(--color-ink)] outline-none transition duration-200 placeholder:text-black/25",
-                    hasAuthError
+                    hasError
                       ? "border-[#d11a2a] focus:border-[#d11a2a]"
                       : "border-black/10 focus:border-black/35",
                   ].join(" ")}
-                  type="text"
-                  placeholder="your handle"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(event) => onUsernameChange(event.target.value)}
+                  type="email"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    setErrorMessage("");
+                  }}
                 />
-                <span
-                  className={[
-                    "pointer-events-none absolute bottom-3 right-0 font-mono text-[0.64rem] tracking-[0.05em] text-[rgba(0,113,227,0.72)] transition-opacity duration-200",
-                    ghostUserMove ? "opacity-100" : "opacity-0",
-                  ].join(" ")}
-                >
-                  {ghostUserMove}
-                </span>
               </div>
 
               <div className="relative">
                 <label
                   className="block text-[0.76rem] font-medium tracking-[-0.01em] text-black/42"
-                  htmlFor="inp-pass"
+                  htmlFor="register-username"
                 >
-                  Password
+                  Username
                 </label>
                 <input
-                  id="inp-pass"
+                  id="register-username"
                   className={[
                     "mt-3 block w-full border-0 border-b bg-transparent px-0 pb-3 text-[1.15rem] tracking-[-0.03em] text-[var(--color-ink)] outline-none transition duration-200 placeholder:text-black/25",
-                    hasAuthError
+                    hasError
+                      ? "border-[#d11a2a] focus:border-[#d11a2a]"
+                      : "border-black/10 focus:border-black/35",
+                  ].join(" ")}
+                  type="text"
+                  placeholder="pick a handle"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => {
+                    setUsername(event.target.value);
+                    setErrorMessage("");
+                  }}
+                />
+              </div>
+
+              <div className="relative">
+                <label
+                  className="block text-[0.76rem] font-medium tracking-[-0.01em] text-black/42"
+                  htmlFor="register-password"
+                >
+                  Secure password
+                </label>
+                <input
+                  id="register-password"
+                  className={[
+                    "mt-3 block w-full border-0 border-b bg-transparent px-0 pb-3 text-[1.15rem] tracking-[-0.03em] text-[var(--color-ink)] outline-none transition duration-200 placeholder:text-black/25",
+                    hasError
                       ? "border-[#d11a2a] focus:border-[#d11a2a]"
                       : "border-black/10 focus:border-black/35",
                   ].join(" ")}
                   type="password"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
+                  placeholder="at least 8 characters"
+                  autoComplete="new-password"
                   value={password}
-                  onChange={(event) => onPasswordChange(event.target.value)}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    setErrorMessage("");
+                  }}
                 />
-                <span
-                  className={[
-                    "pointer-events-none absolute bottom-3 right-0 font-mono text-[0.64rem] tracking-[0.05em] text-[rgba(0,113,227,0.72)] transition-opacity duration-200",
-                    ghostPassMove ? "opacity-100" : "opacity-0",
-                  ].join(" ")}
-                >
-                  {ghostPassMove}
-                </span>
               </div>
             </div>
 
@@ -227,10 +206,10 @@ export function AuthFlow() {
               <p
                 className={[
                   "text-[0.9rem] tracking-[-0.01em] text-[#d11a2a] transition-opacity duration-150",
-                  hasAuthError ? "opacity-100" : "opacity-0",
+                  hasError ? "opacity-100" : "opacity-0",
                 ].join(" ")}
               >
-                Failed to verify you.
+                {errorMessage || "Could not create your account."}
               </p>
             </div>
 
@@ -238,18 +217,18 @@ export function AuthFlow() {
               <button
                 className="inline-flex min-h-11 items-center justify-center px-0 text-[1rem] font-semibold tracking-[-0.02em] text-[#111114] transition duration-200 hover:text-black/60 disabled:cursor-default disabled:opacity-60"
                 type="button"
-                onClick={() => void handleLogin()}
+                onClick={() => void handleRegister()}
                 disabled={isBusy}
               >
-                {isBusy ? "Working" : "Continue"}
+                {isBusy ? "Working" : "Create account"}
               </button>
               <p className="text-center text-[0.7rem] lg:text-left">
-                Don&apos;t have an account?{" "}
+                Already have an account?{" "}
                 <Link
-                  href="/register"
-                  className="text-blue-500 underline decoration-[#0066cc] underline-offset-[0.18em]"
+                  href="/login"
+                  className="text-[#0066cc] underline decoration-[#0066cc] underline-offset-[0.18em]"
                 >
-                  Join Prism
+                  Sign in
                 </Link>
                 .
               </p>
@@ -267,10 +246,10 @@ export function AuthFlow() {
         ].join(" ")}
       >
         <p className="text-[clamp(2.6rem,6vw,4.5rem)] font-semibold tracking-[-0.06em] text-[#111114]">
-          Welcome back
+          Account created
         </p>
         <p className="mt-3 text-[0.76rem] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
-          Loading your workspace
+          Opening your workspace
         </p>
       </div>
     </main>

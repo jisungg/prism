@@ -1,4 +1,5 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "crypto";
+import { cache } from "react";
 import { promisify } from "util";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -99,14 +100,7 @@ export async function destroySession() {
   cookieStore.delete(SESSION_COOKIE);
 }
 
-export async function getSessionUser(): Promise<AuthUser | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE)?.value;
-
-  if (!token) {
-    return null;
-  }
-
+const getSessionUserByTokenHash = cache(async (tokenHash: string): Promise<AuthUser | null> => {
   const result = await db.query<AuthUser>(
     `
       SELECT users.id, users.email::text, users.username::text
@@ -116,14 +110,21 @@ export async function getSessionUser(): Promise<AuthUser | null> {
         AND sessions.expires_at > now()
       LIMIT 1
     `,
-    [hashSessionToken(token)],
+    [tokenHash],
   );
 
-  if (!result.rowCount) {
+  return result.rows[0] ?? null;
+});
+
+export async function getSessionUser(): Promise<AuthUser | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+
+  if (!token) {
     return null;
   }
 
-  return result.rows[0];
+  return getSessionUserByTokenHash(hashSessionToken(token));
 }
 
 export async function getUserByEmail(email: string) {
