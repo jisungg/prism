@@ -3,6 +3,7 @@ import { cache } from "react";
 import { promisify } from "util";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { PoolClient } from "pg";
 import { db } from "@/lib/db";
 
 const scrypt = promisify(scryptCallback);
@@ -16,7 +17,18 @@ type UserRow = {
   password_hash: string;
 };
 
+type PlayerRow = {
+  id: string;
+};
+
 export type AuthUser = Omit<UserRow, "password_hash">;
+export type PlayerIdentity = {
+  id: string;
+  displayName: string;
+  normalizedName: string;
+  relationshipType: "self" | "alternate" | "tracked";
+  isPrimary: boolean;
+};
 
 function hashSessionToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -56,6 +68,10 @@ export function normalizeEmail(email: string) {
 
 export function normalizeUsername(username: string) {
   return username.trim().toLowerCase();
+}
+
+function displayNameForUsername(username: string) {
+  return username.trim();
 }
 
 export function provisionalEmailForUsername(username: string) {
@@ -155,25 +171,87 @@ export async function getUserByUsername(username: string) {
   return result.rows[0] ?? null;
 }
 
+export async function getPrimaryPlayerForUser(userId: string): Promise<PlayerIdentity | null> {
+  const result = await db.query<PlayerIdentity>(
+    `
+      SELECT
+        players.id,
+        players.display_name AS "displayName",
+        players.normalized_name::text AS "normalizedName",
+        user_player_links.relationship_type AS "relationshipType",
+        user_player_links.is_primary AS "isPrimary"
+      FROM user_player_links
+      INNER JOIN players ON players.id = user_player_links.player_id
+      WHERE user_player_links.user_id = $1
+        AND user_player_links.is_primary = true
+      LIMIT 1
+    `,
+    [userId],
+  );
+
+  return result.rows[0] ?? null;
+}
+
 export async function createUser(input: {
   email?: string;
   username: string;
   password: string;
 }) {
-  const result = await db.query<AuthUser>(
-    `
-      INSERT INTO users (email, username, password_hash)
-      VALUES ($1, $2, $3)
-      RETURNING id, email::text, username::text
-    `,
-    [
-      normalizeEmail(input.email ?? provisionalEmailForUsername(input.username)),
-      normalizeUsername(input.username),
-      await hashPassword(input.password),
-    ],
-  );
+  const client = await db.connect();
 
-  return result.rows[0];
+  try {
+    await client.query("BEGIN");
+
+    const email = normalizeEmail(input.email ?? provisionalEmailForUsername(input.username));
+    const username = normalizeUsername(input.username);
+    const displayName = displayNameForUsername(input.username);
+    const passwordHash = await hashPassword(input.password);
+
+    const userResult = await client.query<AuthUser>(
+      `
+        INSERT INTO users (email, username, password_hash)
+        VALUES ($1, $2, $3)
+        RETURNING id, email::text, username::text
+      `,
+      [email, username, passwordHash],
+    );
+
+    const user = userResult.rows[0];
+
+    const playerResult = await client.query<PlayerRow>(
+      `
+        INSERT INTO players (display_name, normalized_name)
+        VALUES ($1, $2)
+        RETURNING id
+      `,
+      [displayName, username],
+    );
+
+    await client.query(
+      `
+        INSERT INTO user_player_links (user_id, player_id, relationship_type, is_primary)
+        VALUES ($1, $2, 'self', true)
+      `,
+      [user.id, playerResult.rows[0].id],
+    );
+
+    await client.query("COMMIT");
+
+    return user;
+  } catch (error) {
+    await rollbackQuietly(client);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function rollbackQuietly(client: PoolClient) {
+  try {
+    await client.query("ROLLBACK");
+  } catch {
+    // Ignore rollback failures and preserve the original error.
+  }
 }
 
 export async function requireUser() {
@@ -184,6 +262,17 @@ export async function requireUser() {
   }
 
   return user;
+}
+
+export async function requireCurrentPlayer() {
+  const user = await requireUser();
+  const player = await getPrimaryPlayerForUser(user.id);
+
+  if (!player) {
+    throw new Error(`Primary player missing for user ${user.id}.`);
+  }
+
+  return player;
 }
 
 export async function redirectIfAuthenticated() {

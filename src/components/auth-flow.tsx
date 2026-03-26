@@ -17,6 +17,7 @@ const DASHBOARD_REDIRECT_MS = 2400;
 export function AuthFlow() {
   const router = useRouter();
   const timeoutIdsRef = useRef<number[]>([]);
+  const [hasMounted, setHasMounted] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [isSuccessVisible, setIsSuccessVisible] = useState(false);
   const [username, setUsername] = useState("");
@@ -28,6 +29,9 @@ export function AuthFlow() {
   const [passMoveIndex, setPassMoveIndex] = useState(0);
 
   useEffect(() => {
+    setHasMounted(true);
+    setIsSuccessVisible(false);
+
     return () => {
       for (const timeoutId of timeoutIdsRef.current) {
         window.clearTimeout(timeoutId);
@@ -64,6 +68,7 @@ export function AuthFlow() {
     }, SUCCESS_OVERLAY_DELAY_MS);
 
     rememberTimeout(() => {
+      setIsSuccessVisible(false);
       startTransition(() => {
         router.push("/dashboard");
         router.refresh();
@@ -152,7 +157,7 @@ export function AuthFlow() {
               A clean workspace for serious chess preparation.
             </h1>
             <p className="mt-6 max-w-[30rem] text-[1.05rem] leading-[1.7] text-[var(--color-muted)]">
-              Welcome back to Prism. Continue your prep.
+              Welcome back. Log in to continue your prep.
             </p>
           </div>
         </section>
@@ -260,8 +265,8 @@ export function AuthFlow() {
 
       <div
         className={[
-          "fixed inset-0 z-100 flex flex-col items-center justify-center bg-[rgba(245,245,247,0.82)] backdrop-blur-[20px] transition-opacity duration-500",
-          isSuccessVisible
+          "fixed inset-0 z-100 flex flex-col items-center justify-center bg-[rgba(245,245,247,0.82)] backdrop-blur-[20px] transition-opacity duration-4000",
+          hasMounted && isSuccessVisible
             ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0",
         ].join(" ")}
