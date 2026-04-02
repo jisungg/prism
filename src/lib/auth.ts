@@ -17,7 +17,7 @@ type UserRow = {
   password_hash: string;
 };
 
-type PlayerRow = {
+type IdRow = {
   id: string;
 };
 
@@ -26,7 +26,7 @@ export type PlayerIdentity = {
   id: string;
   displayName: string;
   normalizedName: string;
-  relationshipType: "self" | "alternate" | "tracked";
+  relationshipType: "self" | "alternate" | "managed";
   isPrimary: boolean;
 };
 
@@ -72,6 +72,23 @@ export function normalizeUsername(username: string) {
 
 function displayNameForUsername(username: string) {
   return username.trim();
+}
+
+function communityNameForDisplayName(displayName: string) {
+  return `${displayName}'s community`;
+}
+
+function profileHeadlineForUsername(username: string) {
+  return `Studying with @${normalizeUsername(username)}.`;
+}
+
+function communitySlugForUser(username: string, userId: string) {
+  const normalized = normalizeUsername(username)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  const base = normalized || "community";
+  return `${base}-community-${userId.slice(0, 8)}`;
 }
 
 export function provisionalEmailForUsername(username: string) {
@@ -218,7 +235,7 @@ export async function createUser(input: {
 
     const user = userResult.rows[0];
 
-    const playerResult = await client.query<PlayerRow>(
+    const playerResult = await client.query<IdRow>(
       `
         INSERT INTO players (display_name, normalized_name)
         VALUES ($1, $2)
@@ -233,6 +250,45 @@ export async function createUser(input: {
         VALUES ($1, $2, 'self', true)
       `,
       [user.id, playerResult.rows[0].id],
+    );
+
+    const communityName = communityNameForDisplayName(displayName);
+    const communitySlug = communitySlugForUser(username, user.id);
+
+    const communityResult = await client.query<IdRow>(
+      `
+        INSERT INTO communities (owner_user_id, name, slug, description, visibility)
+        VALUES ($1, $2, $3, $4, 'private')
+        RETURNING id
+      `,
+      [
+        user.id,
+        communityName,
+        communitySlug,
+        "A private home base for reviews, discussion, and shared study.",
+      ],
+    );
+
+    await client.query(
+      `
+        INSERT INTO community_memberships (community_id, user_id, role, status, joined_at)
+        VALUES ($1, $2, 'owner', 'active', now())
+      `,
+      [communityResult.rows[0].id, user.id],
+    );
+
+    await client.query(
+      `
+        INSERT INTO user_profiles (user_id, display_name, headline, bio, home_community_id)
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      [
+        user.id,
+        displayName,
+        profileHeadlineForUsername(username),
+        "Learning through shared analysis and community review.",
+        communityResult.rows[0].id,
+      ],
     );
 
     await client.query("COMMIT");

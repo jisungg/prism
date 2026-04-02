@@ -1,56 +1,58 @@
 CREATE EXTENSION IF NOT EXISTS citext;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Prism community MVP:
--- - users authenticate into the app
--- - players are chess identities a user manages
--- - user profiles, follows, and alerts power the social layer
--- - each uploaded game belongs to one player identity and one board side
--- - communities organize members, shared games, comments, reviews, and discussion
+ALTER TABLE IF EXISTS players
+  ADD COLUMN IF NOT EXISTS bio text;
 
-CREATE TABLE users (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  email citext NOT NULL UNIQUE,
-  username citext NOT NULL UNIQUE,
-  password_hash text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'user_player_links'
+      AND column_name = 'relationship_type'
+  ) THEN
+    UPDATE user_player_links
+    SET relationship_type = 'managed'
+    WHERE relationship_type = 'tracked';
+  END IF;
+END $$;
 
-CREATE TABLE sessions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash text NOT NULL UNIQUE,
-  expires_at timestamptz NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+ALTER TABLE IF EXISTS user_player_links
+  DROP CONSTRAINT IF EXISTS user_player_links_check;
 
-CREATE TABLE players (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  display_name text NOT NULL,
-  normalized_name citext NOT NULL UNIQUE,
-  chesscom_username citext,
-  lichess_username citext,
-  fide_id text,
-  title text,
-  federation text,
-  bio text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+ALTER TABLE IF EXISTS user_player_links
+  DROP CONSTRAINT IF EXISTS user_player_links_relationship_type_check;
 
-CREATE TABLE user_player_links (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  player_id uuid NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  relationship_type text NOT NULL CHECK (
-    relationship_type IN ('self', 'alternate', 'managed')
-  ),
-  is_primary boolean NOT NULL DEFAULT false,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (NOT is_primary OR relationship_type IN ('self', 'alternate', 'managed')),
-  UNIQUE (user_id, player_id)
-);
+ALTER TABLE IF EXISTS user_player_links
+  ADD CONSTRAINT user_player_links_relationship_type_check
+  CHECK (relationship_type = ANY (ARRAY['self'::text, 'alternate'::text, 'managed'::text]));
+
+ALTER TABLE IF EXISTS user_player_links
+  ADD CONSTRAINT user_player_links_check
+  CHECK (
+    NOT is_primary
+    OR (relationship_type = ANY (ARRAY['self'::text, 'alternate'::text, 'managed'::text]))
+  );
+
+DROP TABLE IF EXISTS notifications CASCADE;
+DROP TABLE IF EXISTS discussion_messages CASCADE;
+DROP TABLE IF EXISTS discussion_threads CASCADE;
+DROP TABLE IF EXISTS support_answer_votes CASCADE;
+DROP TABLE IF EXISTS support_answers CASCADE;
+DROP TABLE IF EXISTS game_support_requests CASCADE;
+DROP TABLE IF EXISTS review_positions CASCADE;
+DROP TABLE IF EXISTS game_reviews CASCADE;
+DROP TABLE IF EXISTS game_comments CASCADE;
+DROP TABLE IF EXISTS moves CASCADE;
+DROP TABLE IF EXISTS community_games CASCADE;
+DROP TABLE IF EXISTS game_participants CASCADE;
+DROP TABLE IF EXISTS user_game_links CASCADE;
+DROP TABLE IF EXISTS games CASCADE;
+DROP TABLE IF EXISTS user_follows CASCADE;
+DROP TABLE IF EXISTS community_memberships CASCADE;
+DROP TABLE IF EXISTS user_profiles CASCADE;
+DROP TABLE IF EXISTS communities CASCADE;
 
 CREATE TABLE communities (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -354,96 +356,134 @@ CREATE TABLE discussion_messages (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_players_normalized_name ON players(normalized_name);
-CREATE INDEX idx_players_chesscom_username ON players(chesscom_username);
-CREATE INDEX idx_players_lichess_username ON players(lichess_username);
-CREATE INDEX idx_players_fide_id ON players(fide_id);
+INSERT INTO communities (
+  owner_user_id,
+  name,
+  slug,
+  description,
+  visibility
+)
+SELECT
+  users.id,
+  players.display_name || '''s community',
+  regexp_replace(users.username::text, '[^a-z0-9]+', '-', 'g') || '-community-' || left(users.id::text, 8),
+  'A private home base for reviews, discussion, and shared study.',
+  'private'
+FROM users
+JOIN user_player_links
+  ON user_player_links.user_id = users.id
+ AND user_player_links.is_primary = true
+JOIN players ON players.id = user_player_links.player_id;
 
-CREATE INDEX idx_user_player_links_user_id ON user_player_links(user_id);
-CREATE INDEX idx_user_player_links_player_id ON user_player_links(player_id);
-CREATE INDEX idx_user_player_links_relationship_type ON user_player_links(relationship_type);
-CREATE UNIQUE INDEX idx_user_player_links_primary_per_user
+INSERT INTO community_memberships (
+  community_id,
+  user_id,
+  role,
+  status,
+  joined_at
+)
+SELECT
+  communities.id,
+  communities.owner_user_id,
+  'owner',
+  'active',
+  now()
+FROM communities;
+
+INSERT INTO user_profiles (
+  user_id,
+  display_name,
+  headline,
+  bio,
+  home_community_id
+)
+SELECT
+  users.id,
+  players.display_name,
+  'Studying with @' || users.username::text || '.',
+  'Learning through shared analysis and community review.',
+  communities.id
+FROM users
+JOIN user_player_links
+  ON user_player_links.user_id = users.id
+ AND user_player_links.is_primary = true
+JOIN players ON players.id = user_player_links.player_id
+JOIN communities ON communities.owner_user_id = users.id;
+
+CREATE INDEX IF NOT EXISTS idx_players_normalized_name ON players(normalized_name);
+CREATE INDEX IF NOT EXISTS idx_players_chesscom_username ON players(chesscom_username);
+CREATE INDEX IF NOT EXISTS idx_players_lichess_username ON players(lichess_username);
+CREATE INDEX IF NOT EXISTS idx_players_fide_id ON players(fide_id);
+
+CREATE INDEX IF NOT EXISTS idx_user_player_links_user_id ON user_player_links(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_player_links_player_id ON user_player_links(player_id);
+CREATE INDEX IF NOT EXISTS idx_user_player_links_relationship_type ON user_player_links(relationship_type);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_player_links_primary_per_user
   ON user_player_links(user_id)
   WHERE is_primary = true;
 
-CREATE INDEX idx_communities_owner_user_id ON communities(owner_user_id);
-CREATE INDEX idx_communities_visibility ON communities(visibility);
-
-CREATE INDEX idx_user_profiles_home_community_id ON user_profiles(home_community_id);
-
-CREATE INDEX idx_community_memberships_community_id ON community_memberships(community_id);
-CREATE INDEX idx_community_memberships_user_id ON community_memberships(user_id);
-CREATE INDEX idx_community_memberships_role ON community_memberships(role);
-CREATE INDEX idx_community_memberships_status ON community_memberships(status);
-
-CREATE INDEX idx_user_follows_follower_user_id ON user_follows(follower_user_id);
-CREATE INDEX idx_user_follows_followed_user_id ON user_follows(followed_user_id);
-CREATE INDEX idx_user_follows_notify_on_posts ON user_follows(notify_on_posts);
-
-CREATE INDEX idx_games_uploaded_by_user_id ON games(uploaded_by_user_id);
-CREATE INDEX idx_games_player_id ON games(player_id);
-CREATE INDEX idx_games_source_type ON games(source_type);
-CREATE INDEX idx_games_source_game_id ON games(source_game_id);
-CREATE INDEX idx_games_played_at ON games(played_at);
-CREATE INDEX idx_games_player_result ON games(player_result);
-CREATE INDEX idx_games_eco_code ON games(eco_code);
-CREATE INDEX idx_games_analysis_status ON games(analysis_status);
-
-CREATE INDEX idx_community_games_community_id ON community_games(community_id);
-CREATE INDEX idx_community_games_game_id ON community_games(game_id);
-CREATE INDEX idx_community_games_shared_by_user_id ON community_games(shared_by_user_id);
-
-CREATE INDEX idx_game_comments_game_id ON game_comments(game_id);
-CREATE INDEX idx_game_comments_community_id ON game_comments(community_id);
-CREATE INDEX idx_game_comments_parent_comment_id ON game_comments(parent_comment_id);
-CREATE INDEX idx_game_comments_author_user_id ON game_comments(author_user_id);
-
-CREATE INDEX idx_moves_game_id ON moves(game_id);
-CREATE INDEX idx_moves_move_number ON moves(game_id, move_number);
-CREATE INDEX idx_moves_color ON moves(game_id, color);
-
-CREATE INDEX idx_game_reviews_requested_by_user_id ON game_reviews(requested_by_user_id);
-CREATE INDEX idx_game_reviews_status ON game_reviews(status);
-
-CREATE INDEX idx_review_positions_review_id ON review_positions(review_id);
-CREATE INDEX idx_review_positions_classification ON review_positions(classification);
-CREATE INDEX idx_review_positions_needs_human_explanation
+CREATE INDEX IF NOT EXISTS idx_communities_owner_user_id ON communities(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_communities_visibility ON communities(visibility);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_home_community_id ON user_profiles(home_community_id);
+CREATE INDEX IF NOT EXISTS idx_community_memberships_community_id ON community_memberships(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_memberships_user_id ON community_memberships(user_id);
+CREATE INDEX IF NOT EXISTS idx_community_memberships_role ON community_memberships(role);
+CREATE INDEX IF NOT EXISTS idx_community_memberships_status ON community_memberships(status);
+CREATE INDEX IF NOT EXISTS idx_user_follows_follower_user_id ON user_follows(follower_user_id);
+CREATE INDEX IF NOT EXISTS idx_user_follows_followed_user_id ON user_follows(followed_user_id);
+CREATE INDEX IF NOT EXISTS idx_user_follows_notify_on_posts ON user_follows(notify_on_posts);
+CREATE INDEX IF NOT EXISTS idx_games_uploaded_by_user_id ON games(uploaded_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_games_player_id ON games(player_id);
+CREATE INDEX IF NOT EXISTS idx_games_source_type ON games(source_type);
+CREATE INDEX IF NOT EXISTS idx_games_source_game_id ON games(source_game_id);
+CREATE INDEX IF NOT EXISTS idx_games_played_at ON games(played_at);
+CREATE INDEX IF NOT EXISTS idx_games_player_result ON games(player_result);
+CREATE INDEX IF NOT EXISTS idx_games_eco_code ON games(eco_code);
+CREATE INDEX IF NOT EXISTS idx_games_analysis_status ON games(analysis_status);
+CREATE INDEX IF NOT EXISTS idx_community_games_community_id ON community_games(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_games_game_id ON community_games(game_id);
+CREATE INDEX IF NOT EXISTS idx_community_games_shared_by_user_id ON community_games(shared_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_game_comments_game_id ON game_comments(game_id);
+CREATE INDEX IF NOT EXISTS idx_game_comments_community_id ON game_comments(community_id);
+CREATE INDEX IF NOT EXISTS idx_game_comments_parent_comment_id ON game_comments(parent_comment_id);
+CREATE INDEX IF NOT EXISTS idx_game_comments_author_user_id ON game_comments(author_user_id);
+CREATE INDEX IF NOT EXISTS idx_moves_game_id ON moves(game_id);
+CREATE INDEX IF NOT EXISTS idx_moves_move_number ON moves(game_id, move_number);
+CREATE INDEX IF NOT EXISTS idx_moves_color ON moves(game_id, color);
+CREATE INDEX IF NOT EXISTS idx_game_reviews_requested_by_user_id ON game_reviews(requested_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_game_reviews_status ON game_reviews(status);
+CREATE INDEX IF NOT EXISTS idx_review_positions_review_id ON review_positions(review_id);
+CREATE INDEX IF NOT EXISTS idx_review_positions_classification ON review_positions(classification);
+CREATE INDEX IF NOT EXISTS idx_review_positions_needs_human_explanation
   ON review_positions(needs_human_explanation);
-
-CREATE INDEX idx_game_support_requests_community_id ON game_support_requests(community_id);
-CREATE INDEX idx_game_support_requests_game_id ON game_support_requests(game_id);
-CREATE INDEX idx_game_support_requests_requested_by_user_id
+CREATE INDEX IF NOT EXISTS idx_game_support_requests_community_id ON game_support_requests(community_id);
+CREATE INDEX IF NOT EXISTS idx_game_support_requests_game_id ON game_support_requests(game_id);
+CREATE INDEX IF NOT EXISTS idx_game_support_requests_requested_by_user_id
   ON game_support_requests(requested_by_user_id);
-CREATE INDEX idx_game_support_requests_status ON game_support_requests(status);
-CREATE INDEX idx_game_support_requests_support_kind ON game_support_requests(support_kind);
-
-CREATE INDEX idx_support_answers_request_id ON support_answers(request_id);
-CREATE INDEX idx_support_answers_author_user_id ON support_answers(author_user_id);
-CREATE INDEX idx_support_answers_generally_accepted ON support_answers(is_generally_accepted);
-CREATE UNIQUE INDEX idx_support_answers_one_poster_selected_per_request
+CREATE INDEX IF NOT EXISTS idx_game_support_requests_status ON game_support_requests(status);
+CREATE INDEX IF NOT EXISTS idx_game_support_requests_support_kind ON game_support_requests(support_kind);
+CREATE INDEX IF NOT EXISTS idx_support_answers_request_id ON support_answers(request_id);
+CREATE INDEX IF NOT EXISTS idx_support_answers_author_user_id ON support_answers(author_user_id);
+CREATE INDEX IF NOT EXISTS idx_support_answers_generally_accepted ON support_answers(is_generally_accepted);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_support_answers_one_poster_selected_per_request
   ON support_answers(request_id)
   WHERE is_poster_selected = true;
-CREATE UNIQUE INDEX idx_support_answers_one_generally_accepted_per_request
+CREATE UNIQUE INDEX IF NOT EXISTS idx_support_answers_one_generally_accepted_per_request
   ON support_answers(request_id)
   WHERE is_generally_accepted = true;
-
-CREATE INDEX idx_support_answer_votes_user_id ON support_answer_votes(user_id);
-CREATE INDEX idx_support_answer_votes_vote_type ON support_answer_votes(vote_type);
-
-CREATE INDEX idx_notifications_user_id ON notifications(user_id);
-CREATE INDEX idx_notifications_actor_user_id ON notifications(actor_user_id);
-CREATE INDEX idx_notifications_event_type ON notifications(event_type);
-CREATE INDEX idx_notifications_read_at ON notifications(read_at);
-CREATE INDEX idx_notifications_created_at ON notifications(created_at);
-
-CREATE INDEX idx_discussion_threads_community_id ON discussion_threads(community_id);
-CREATE INDEX idx_discussion_threads_game_id ON discussion_threads(game_id);
-CREATE INDEX idx_discussion_threads_review_position_id ON discussion_threads(review_position_id);
-CREATE INDEX idx_discussion_threads_support_request_id ON discussion_threads(support_request_id);
-CREATE INDEX idx_discussion_threads_created_by_user_id ON discussion_threads(created_by_user_id);
-
-CREATE INDEX idx_discussion_messages_thread_id ON discussion_messages(thread_id);
-CREATE INDEX idx_discussion_messages_author_user_id ON discussion_messages(author_user_id);
-
-CREATE INDEX idx_sessions_user_id ON sessions(user_id);
-CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_support_answer_votes_user_id ON support_answer_votes(user_id);
+CREATE INDEX IF NOT EXISTS idx_support_answer_votes_vote_type ON support_answer_votes(vote_type);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_actor_user_id ON notifications(actor_user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_event_type ON notifications(event_type);
+CREATE INDEX IF NOT EXISTS idx_notifications_read_at ON notifications(read_at);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
+CREATE INDEX IF NOT EXISTS idx_discussion_threads_community_id ON discussion_threads(community_id);
+CREATE INDEX IF NOT EXISTS idx_discussion_threads_game_id ON discussion_threads(game_id);
+CREATE INDEX IF NOT EXISTS idx_discussion_threads_review_position_id ON discussion_threads(review_position_id);
+CREATE INDEX IF NOT EXISTS idx_discussion_threads_support_request_id ON discussion_threads(support_request_id);
+CREATE INDEX IF NOT EXISTS idx_discussion_threads_created_by_user_id ON discussion_threads(created_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_discussion_messages_thread_id ON discussion_messages(thread_id);
+CREATE INDEX IF NOT EXISTS idx_discussion_messages_author_user_id ON discussion_messages(author_user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);

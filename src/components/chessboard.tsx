@@ -43,7 +43,6 @@ import {
   isTouchPointer,
   movePiece,
   normalizePositionInput,
-  oppositeColor,
   serializeFenPosition,
 } from "@/components/chessboard-system/utils";
 
@@ -51,6 +50,12 @@ type DragPreviewState = {
   from: SquareName;
   piece: ChessPiece;
   squareSize: number;
+};
+
+type AnimatedMoveState = {
+  piece: ChessPiece;
+  from: SquareName;
+  to: SquareName;
 };
 
 type DragSession = {
@@ -116,6 +121,7 @@ const SquareCell = memo(function SquareCell({
   darkSquareClassName,
   selectedSquareClassName,
   legalMoveClassName,
+  previewSquareClassName,
   lastMoveClassName,
   focusedSquareClassName,
   getSquareClassName,
@@ -133,6 +139,7 @@ const SquareCell = memo(function SquareCell({
   darkSquareClassName?: string;
   selectedSquareClassName?: string;
   legalMoveClassName?: string;
+  previewSquareClassName?: string;
   lastMoveClassName?: string;
   focusedSquareClassName?: string;
   getSquareClassName?: (props: SquareRenderProps) => string | undefined;
@@ -145,9 +152,11 @@ const SquareCell = memo(function SquareCell({
     squareProps.state.isDark ? "bg-[#d8d1c5]" : "bg-[#f2ede2]",
     squareClassName,
     squareProps.state.isDark ? darkSquareClassName : lightSquareClassName,
-    squareProps.state.isSelected && (selectedSquareClassName ?? "shadow-[inset_0_0_0_2px_rgba(17,17,20,0.52)]"),
+    squareProps.state.isSelected
+      && (selectedSquareClassName ?? "shadow-[inset_0_0_0_2px_rgba(17,17,20,0.52),inset_0_0_0_999px_rgba(17,17,20,0.04)]"),
     squareProps.state.isLegalTarget && legalMoveClassName,
-    squareProps.state.isLastMove && (lastMoveClassName ?? "shadow-[inset_0_0_0_999px_rgba(255,214,102,0.16)]"),
+    squareProps.state.isPreview && (previewSquareClassName ?? "shadow-[inset_0_0_0_2px_rgba(17,17,20,0.22)]"),
+    squareProps.state.isLastMove && (lastMoveClassName ?? "shadow-[inset_0_0_0_999px_rgba(0,113,227,0.12)]"),
     squareProps.state.isFocused && (focusedSquareClassName ?? "ring-2 ring-inset ring-black/25"),
     getSquareClassName?.(squareProps),
   );
@@ -189,7 +198,7 @@ const SquareCell = memo(function SquareCell({
 
           {squareProps.state.isLegalTarget ? (
             <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <span className="h-[18%] w-[18%] rounded-full bg-black/14" />
+              <span className="h-[18%] w-[18%] rounded-full bg-black/12" />
             </span>
           ) : null}
         </>
@@ -244,6 +253,7 @@ const PieceSprite = memo(function PieceSprite({
     color: piece.color,
     type: piece.kind,
     isDragging: false,
+    isAnimating: false,
     size: squareSize,
     boardOrientation,
   };
@@ -262,7 +272,7 @@ const PieceSprite = memo(function PieceSprite({
       tabIndex={-1}
       aria-label={`${piece.color} ${piece.kind} on ${square}`}
       className={cx(
-        "absolute flex items-center justify-center border-0 bg-transparent p-0 text-left transition-opacity duration-100",
+        "absolute flex cursor-grab items-center justify-center border-0 bg-transparent p-0 text-left transition-[left,top,opacity] duration-180 ease-out active:cursor-grabbing",
         hidden ? "opacity-0" : "opacity-100",
       )}
       style={{
@@ -281,7 +291,7 @@ const PieceSprite = memo(function PieceSprite({
               <DefaultPieceSvg
                 piece={piece}
                 className={cx(
-                  "pointer-events-none h-full w-full",
+                  "pointer-events-none h-full w-full drop-shadow-[0_2px_6px_rgba(17,17,20,0.16)]",
                   pieceClassName,
                   piece.color === "white" ? whitePieceClassName : blackPieceClassName,
                 )}
@@ -291,6 +301,89 @@ const PieceSprite = memo(function PieceSprite({
     </button>
   );
 });
+
+function AnimatedPieceOverlay({
+  move,
+  boardOrientation,
+  squareSize,
+  durationMs,
+  easing,
+  pieceClassName,
+  whitePieceClassName,
+  blackPieceClassName,
+  renderPiece,
+  pieceComponents,
+  onComplete,
+}: {
+  move: AnimatedMoveState;
+  boardOrientation: BoardOrientation;
+  squareSize: number;
+  durationMs: number;
+  easing: string;
+  pieceClassName?: string;
+  whitePieceClassName?: string;
+  blackPieceClassName?: string;
+  renderPiece?: ChessboardProps["renderPiece"];
+  pieceComponents?: PieceComponentMap;
+  onComplete: () => void;
+}) {
+  const [isRunning, setIsRunning] = useState(false);
+  const from = getSquareDisplayPosition(move.from, boardOrientation);
+  const to = getSquareDisplayPosition(move.to, boardOrientation);
+  const deltaX = (to.col - from.col) * 100;
+  const deltaY = (to.row - from.row) * 100;
+  const renderer = getPieceRenderer(renderPiece, pieceComponents, move.piece);
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      setIsRunning(true);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [move.from, move.to]);
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-30"
+      onTransitionEnd={onComplete}
+    >
+      <div
+        className="absolute flex items-center justify-center p-[11%] will-change-transform"
+        style={{
+          left: `${from.col * 12.5}%`,
+          top: `${from.row * 12.5}%`,
+          width: "12.5%",
+          height: "12.5%",
+          transform: isRunning ? `translate(${deltaX}%, ${deltaY}%)` : "translate(0%, 0%)",
+          transitionDuration: `${durationMs}ms`,
+          transitionTimingFunction: easing,
+        }}
+      >
+        {renderer
+          ? renderer({
+              piece: move.piece,
+              square: move.to,
+              color: move.piece.color,
+              type: move.piece.kind,
+              isDragging: false,
+              isAnimating: true,
+              size: squareSize,
+              boardOrientation,
+            })
+          : (
+              <DefaultPieceSvg
+                piece={move.piece}
+                className={cx(
+                  "pointer-events-none h-full w-full drop-shadow-[0_12px_20px_rgba(17,17,20,0.14)]",
+                  pieceClassName,
+                  move.piece.color === "white" ? whitePieceClassName : blackPieceClassName,
+                )}
+              />
+            )}
+      </div>
+    </div>
+  );
+}
 
 export function Chessboard({
   position,
@@ -314,6 +407,7 @@ export function Chessboard({
   pieceComponents,
   theme,
   interaction,
+  animation,
   canMove,
   onSquareClick,
   onPieceDrop,
@@ -326,13 +420,17 @@ export function Chessboard({
   const [internalPosition, setInternalPosition] = useState(() => normalizePositionInput(defaultPosition));
   const [internalSelectedSquare, setInternalSelectedSquare] = useState<SquareName | null>(defaultSelectedSquare);
   const [focusedSquare, setFocusedSquare] = useState<SquareName | null>(null);
+  const [previewSquare, setPreviewSquare] = useState<SquareName | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
+  const [animatedMove, setAnimatedMove] = useState<AnimatedMoveState | null>(null);
   const [boardPixels, setBoardPixels] = useState(0);
 
   const boardRef = useRef<HTMLDivElement | null>(null);
   const dragPreviewRef = useRef<HTMLDivElement | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
   const skipNextClickRef = useRef(false);
+  const previewSquareRef = useRef<SquareName | null>(null);
+  const lastMoveKeyRef = useRef<string | null>(null);
 
   const activePosition = resolvePosition(position, internalPosition);
   const activeSelectedSquare = controlledSelectedSquare === undefined
@@ -360,6 +458,7 @@ export function Chessboard({
     darkSquareClassName,
     selectedSquareClassName,
     legalMoveClassName,
+    previewSquareClassName,
     lastMoveClassName,
     focusedSquareClassName,
     coordinatesClassName,
@@ -376,6 +475,11 @@ export function Chessboard({
     enableKeyboardNavigation = true,
     enableTouchDrag = true,
   } = interaction ?? {};
+  const {
+    enabled: animationsEnabled = true,
+    durationMs: animationDurationMs = 180,
+    easing: animationEasing = "cubic-bezier(0.22, 1, 0.36, 1)",
+  } = animation ?? {};
 
   useEffect(() => {
     const element = boardRef.current;
@@ -407,6 +511,15 @@ export function Chessboard({
     onSelectedSquareChange?.(square);
   }, [controlledSelectedSquare, onSelectedSquareChange]);
 
+  const updatePreviewSquare = useCallback((square: SquareName | null) => {
+    if (previewSquareRef.current === square) {
+      return;
+    }
+
+    previewSquareRef.current = square;
+    setPreviewSquare(square);
+  }, []);
+
   const squarePropsMap = useMemo(
     () => displaySquares.reduce<Map<SquareName, SquareRenderProps>>((map, squareData) => {
       const piece = activePosition[squareData.square] ?? null;
@@ -422,6 +535,7 @@ export function Chessboard({
           isDark: squareData.isDark,
           isSelected: activeSelectedSquare === squareData.square,
           isLegalTarget: legalTargetSet.has(squareData.square),
+          isPreview: previewSquare === squareData.square,
           isLastMove: Boolean(
             lastMove
             && (lastMove.from === squareData.square || lastMove.to === squareData.square),
@@ -433,7 +547,7 @@ export function Chessboard({
 
       return map;
     }, new Map()),
-    [activePosition, activeSelectedSquare, displaySquares, focusedSquare, lastMove, legalTargetSet],
+    [activePosition, activeSelectedSquare, displaySquares, focusedSquare, lastMove, legalTargetSet, previewSquare],
   );
 
   const positionedPieces = useMemo(
@@ -445,6 +559,35 @@ export function Chessboard({
       .filter(Boolean) as Array<{ squareData: DisplaySquare; piece: ChessPiece }>,
     [activePosition, displaySquares],
   );
+
+  useEffect(() => {
+    if (!animationsEnabled || !lastMove) {
+      return;
+    }
+
+    const piece = activePosition[lastMove.to];
+
+    if (!piece) {
+      return;
+    }
+
+    const nextKey = `${lastMove.from}-${lastMove.to}-${piece.color}-${piece.kind}`;
+
+    if (lastMoveKeyRef.current === nextKey) {
+      return;
+    }
+
+    lastMoveKeyRef.current = nextKey;
+    const frameId = window.requestAnimationFrame(() => {
+      setAnimatedMove({
+        piece,
+        from: lastMove.from,
+        to: lastMove.to,
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activePosition, animationsEnabled, lastMove]);
 
   const emitPositionChange = useCallback((nextPosition: BoardPosition, move?: ChessMove) => {
     onPositionChange?.({
@@ -493,11 +636,22 @@ export function Chessboard({
 
     const nextPosition = movePiece(activePosition, move);
     const nextFen = serializeFenPosition(nextPosition);
+    const nextAnimationKey = `${move.from}-${move.to}-${piece.color}-${piece.kind}`;
 
     if (position === undefined) {
       setInternalPosition(nextPosition);
     }
 
+    if (animationsEnabled) {
+      lastMoveKeyRef.current = nextAnimationKey;
+      setAnimatedMove({
+        piece,
+        from: move.from,
+        to: move.to,
+      });
+    }
+
+    updatePreviewSquare(null);
     setSelectedSquare(null);
     onMove?.({
       move,
@@ -512,12 +666,14 @@ export function Chessboard({
     activeOrientation,
     activePosition,
     activeSelectedSquare,
+    animationsEnabled,
     canMove,
     emitPositionChange,
     onMove,
     onPieceDrop,
     position,
     setSelectedSquare,
+    updatePreviewSquare,
   ]);
 
   const activateSquare = useCallback((
@@ -548,6 +704,7 @@ export function Chessboard({
     }
 
     setSelectedSquare(piece && activeSelectedSquare !== square ? square : null);
+    updatePreviewSquare(null);
   }, [
     activePosition,
     activeSelectedSquare,
@@ -555,6 +712,7 @@ export function Chessboard({
     enableClickToMove,
     onSquareClick,
     setSelectedSquare,
+    updatePreviewSquare,
   ]);
 
   const handleGridClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -587,6 +745,26 @@ export function Chessboard({
       nativeEvent: event as unknown as MouseEvent<HTMLButtonElement>,
     });
   }, [activePosition, onRightClickSquare]);
+
+  const handleGridPointerOver = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!activeSelectedSquare) {
+      updatePreviewSquare(null);
+      return;
+    }
+
+    const square = getSquareFromTarget(event.target);
+
+    if (!square) {
+      updatePreviewSquare(null);
+      return;
+    }
+
+    updatePreviewSquare(legalTargetSet.has(square) ? square : null);
+  }, [activeSelectedSquare, legalTargetSet, updatePreviewSquare]);
+
+  const handleGridPointerLeave = useCallback(() => {
+    updatePreviewSquare(null);
+  }, [updatePreviewSquare]);
 
   const focusSquareElement = useCallback((square: SquareName) => {
     const element = boardRef.current?.querySelector<HTMLButtonElement>(
@@ -663,17 +841,19 @@ export function Chessboard({
       return;
     }
 
-    window.onpointermove = null;
-    window.onpointerup = null;
-    window.onpointercancel = null;
-
-    if (commitMove && session.moved && session.overSquare) {
+    if (
+      commitMove
+      && session.moved
+      && session.overSquare
+      && session.overSquare !== session.from
+    ) {
       skipNextClickRef.current = true;
       attemptMove(session.from, session.overSquare, "drag");
     }
 
+    updatePreviewSquare(null);
     setDragPreview(null);
-  }, [attemptMove]);
+  }, [attemptMove, updatePreviewSquare]);
 
   const handlePiecePointerDown = useCallback((
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -711,7 +891,7 @@ export function Chessboard({
       overSquare: square,
     };
 
-    window.onpointermove = (nativeEvent: globalThis.PointerEvent) => {
+    const handleWindowPointerMove = (nativeEvent: globalThis.PointerEvent) => {
       const session = dragSessionRef.current;
 
       if (!session || nativeEvent.pointerId !== session.pointerId) {
@@ -726,6 +906,9 @@ export function Chessboard({
       );
 
       session.overSquare = nextOverSquare;
+      updatePreviewSquare(
+        nextOverSquare && legalTargetSet.has(nextOverSquare) ? nextOverSquare : null,
+      );
 
       if (!session.moved) {
         const distance = Math.hypot(
@@ -763,17 +946,37 @@ export function Chessboard({
         return;
       }
 
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", finishDrag);
+      window.removeEventListener("pointercancel", cancelDrag);
+
       endDragSession(true);
     };
 
-    window.onpointerup = finishDrag;
-    window.onpointercancel = () => endDragSession(false);
+    const cancelDrag = (nativeEvent: globalThis.PointerEvent) => {
+      const session = dragSessionRef.current;
+
+      if (!session || nativeEvent.pointerId !== session.pointerId) {
+        return;
+      }
+
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", finishDrag);
+      window.removeEventListener("pointercancel", cancelDrag);
+      endDragSession(false);
+    };
+
+    window.addEventListener("pointermove", handleWindowPointerMove, { passive: true });
+    window.addEventListener("pointerup", finishDrag);
+    window.addEventListener("pointercancel", cancelDrag);
   }, [
     activeOrientation,
     enableDragToMove,
     enableTouchDrag,
     endDragSession,
+    legalTargetSet,
     setSelectedSquare,
+    updatePreviewSquare,
   ]);
 
   const handlePieceClick = useCallback((
@@ -789,23 +992,23 @@ export function Chessboard({
   }, [activateSquare]);
 
   useEffect(() => () => {
-    window.onpointermove = null;
-    window.onpointerup = null;
-    window.onpointercancel = null;
+    dragSessionRef.current = null;
   }, []);
 
   return (
-    <div ref={containerRef} className={cx("relative flex w-full", className)}>
+    <div ref={containerRef} className={cx("relative flex w-full justify-center", className)}>
       <div
         ref={boardRef}
         role="grid"
         aria-label={ariaLabel}
         className={cx(
-          "relative aspect-square overflow-hidden border border-black/10 bg-[#f4efe5]",
+          "relative aspect-square touch-none select-none overflow-hidden border border-black/10 bg-[#f4efe5]",
           boardClassName,
         )}
         style={boardStyle}
         onClick={handleGridClick}
+        onPointerOver={handleGridPointerOver}
+        onPointerLeave={handleGridPointerLeave}
         onContextMenu={handleGridContextMenu}
         onFocus={handleGridFocus}
         onKeyDown={handleGridKeyDown}
@@ -831,6 +1034,7 @@ export function Chessboard({
                 darkSquareClassName={darkSquareClassName}
                 selectedSquareClassName={selectedSquareClassName}
                 legalMoveClassName={legalMoveClassName}
+                previewSquareClassName={previewSquareClassName}
                 lastMoveClassName={lastMoveClassName}
                 focusedSquareClassName={focusedSquareClassName}
                 getSquareClassName={getSquareClassName}
@@ -852,7 +1056,10 @@ export function Chessboard({
               col={squareData.col}
               boardOrientation={activeOrientation}
               squareSize={resolvedSquareSize}
-              hidden={dragPreview?.from === squareData.square}
+              hidden={
+                dragPreview?.from === squareData.square
+                || animatedMove?.to === squareData.square
+              }
               pieceClassName={pieceClassName}
               whitePieceClassName={whitePieceClassName}
               blackPieceClassName={blackPieceClassName}
@@ -863,6 +1070,22 @@ export function Chessboard({
             />
           ))}
         </div>
+
+        {animatedMove ? (
+          <AnimatedPieceOverlay
+            move={animatedMove}
+            boardOrientation={activeOrientation}
+            squareSize={resolvedSquareSize}
+            durationMs={animationDurationMs}
+            easing={animationEasing}
+            pieceClassName={pieceClassName}
+            whitePieceClassName={whitePieceClassName}
+            blackPieceClassName={blackPieceClassName}
+            renderPiece={renderPiece}
+            pieceComponents={pieceComponents}
+            onComplete={() => setAnimatedMove(null)}
+          />
+        ) : null}
       </div>
 
       {dragPreview ? (
@@ -881,6 +1104,7 @@ export function Chessboard({
               color: dragPreview.piece.color,
               type: dragPreview.piece.kind,
               isDragging: true,
+              isAnimating: false,
               size: dragPreview.squareSize,
               boardOrientation: activeOrientation,
             })) ?? (
@@ -903,6 +1127,7 @@ export function Chessboard({
 }
 
 export type {
+  AnimationConfig,
   BoardOrientation,
   BoardPosition,
   ChessMove,

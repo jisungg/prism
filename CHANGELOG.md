@@ -1,5 +1,79 @@
 # Changelog
 
+## 2026-03-26
+
+### High-level summary
+
+This session stayed strictly focused on `/chess` and the board itself. No dashboard work was done.
+
+The chessboard was pushed from a solid core into a more polished product surface with:
+
+- move animation
+- preview-square state
+- improved drag behavior
+- improved touch affordance
+- stronger square overlays for selection / target / last move
+- refined demo styling and a more intentional Prism-specific custom piece option
+
+### Files modified
+
+- `src/components/chessboard.tsx`
+- `src/components/chessboard-demo.tsx`
+- `src/components/chessboard-system/types.ts`
+
+### Board work completed
+
+#### `src/components/chessboard.tsx`
+
+- Added `AnimationConfig` support through the board props.
+- Added animated move overlay behavior so moves visually travel from source square to target square instead of teleporting.
+- Kept animation isolated from the static board render path.
+- Added preview-square state for cleaner move targeting feedback.
+- Improved overlay layering for:
+  - selected square
+  - preview / target square
+  - last move
+- Improved drag feel:
+  - drag preview still updates via DOM ref/style instead of React state on every pointer move
+  - preview-square updates only when target square changes, not every frame
+  - same-square drag drop no longer commits a fake move
+- Replaced `window.onpointer*` assignment with scoped `addEventListener` usage during drag sessions.
+- Added `touch-none` / `select-none` board interaction affordances.
+- Added animated-piece hiding logic so the target piece in the static layer does not fight the motion overlay.
+
+#### `src/components/chessboard-system/types.ts`
+
+- Added `AnimationConfig`.
+- Added `isPreview` to square visual state.
+- Added `isAnimating` to `ChessPieceRendererProps`.
+- Added `previewSquareClassName` to the board theme contract.
+- Added `animation` to `ChessboardProps`.
+
+#### `src/components/chessboard-demo.tsx`
+
+- Shifted the `/chess` surface toward a more finished Prism board presentation.
+- Custom piece mode now starts enabled by default.
+- Custom piece renderer was refined to feel more intentional and less placeholder-like.
+- Added animation config usage in the demo.
+- Tightened board theming:
+  - rounded board shell
+  - refined light/dark squares
+  - improved selected / preview / last-move states
+- Renamed the page title from `Chessboard Core` to `Prism Board`.
+
+### Validation completed
+
+- `pnpm build` passed after these changes.
+
+### Current next step
+
+The next `/chess` priorities are now narrower:
+
+1. polish move animation further if needed
+2. continue refining custom pieces
+3. improve touch behavior in actual usage
+4. decide when the board is stable enough to replace the dashboard placeholder board area
+
 ## 2026-03-25
 
 ### Repo state

@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -29,18 +29,6 @@ export function RegisterFlow() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        void handleRegister();
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [email, username, password, isBusy, isSuccessVisible]);
 
   function rememberTimeout(callback: () => void, delay: number) {
     const timeoutId = window.setTimeout(() => {
@@ -102,6 +90,22 @@ export function RegisterFlow() {
     }
   }
 
+  const onEnterKey = useEffectEvent(() => {
+    void handleRegister();
+  });
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        onEnterKey();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const hasError = Boolean(errorMessage);
 
   return (
@@ -110,12 +114,12 @@ export function RegisterFlow() {
         <section className="animate-[rise-in_720ms_cubic-bezier(0.2,0.7,0.2,1)_both] self-center">
           <div className="max-w-[33rem]">
             <h1 className="max-w-[11ch] text-[clamp(3rem,7vw,5.25rem)] leading-[0.94] tracking-[-0.045em] text-[#0f1014] text-balance">
-              Create the workspace behind your prep.
+              Create your first chess community.
             </h1>
             <p className="mt-6 max-w-[30rem] text-[1.05rem] leading-[1.7] text-[var(--color-muted)]">
-              Welcome to Prism. Study opponents, review tendencies, and prepare
-              openings with a workspace built for reports, repertoire work, and
-              game-level analysis.
+              Welcome to Prism. Upload games from your side, request engine
+              reviews, and build a space where stronger players can explain the
+              ideas behind difficult moves.
             </p>
           </div>
         </section>
@@ -249,7 +253,7 @@ export function RegisterFlow() {
           Account created
         </p>
         <p className="mt-3 text-[0.76rem] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
-          Opening your workspace
+          Opening your starter community
         </p>
       </div>
     </main>

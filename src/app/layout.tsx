@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Prism",
-  description: "Behavior-first chess analysis and opponent preparation.",
+  description: "Chess collaboration, game review, and community explanation.",
 };
 
 export default function RootLayout({

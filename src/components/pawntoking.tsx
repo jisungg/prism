@@ -34,7 +34,7 @@ const FONT_FAMILY = "SF Mono, Monaco, Cascadia Code, Consolas, JetBrains Mono, F
 const BACKGROUND_COLOR = null;
 
 const Pawntoking = (props: AsciiMotionComponentProps = {}) => {
-  const { showControls = true, autoPlay = true, onReady } = props;
+  const { autoPlay = true, onReady } = props;
   const initialAutoPlay = autoPlay !== false;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);

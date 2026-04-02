@@ -1,13 +1,8 @@
 "use client";
 
-import { startTransition, useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-
-type SubmitStatus = {
-  ok?: boolean;
-  error?: string;
-};
 
 const USER_MOVES = ["e2→e4", "d2→d4", "c2→c4", "f2→f3", "g2→g3"];
 const PASS_MOVES = ["Ng1→f3", "Bc1→e3", "Qd1→h5", "Rd1→d4", "Ke1→g1"];
@@ -38,18 +33,6 @@ export function AuthFlow() {
       }
     };
   }, []);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        void handleLogin();
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isBusy, isSuccessVisible, username, password]);
 
   function rememberTimeout(callback: () => void, delay: number) {
     const timeoutId = window.setTimeout(() => {
@@ -99,8 +82,6 @@ export function AuthFlow() {
         }),
       });
 
-      const result = (await response.json()) as SubmitStatus;
-
       if (!response.ok) {
         setHasAuthError(true);
         return;
@@ -121,6 +102,22 @@ export function AuthFlow() {
 
     await submit("/api/auth/login");
   }
+
+  const onEnterKey = useEffectEvent(() => {
+    void handleLogin();
+  });
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        onEnterKey();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   function onUsernameChange(value: string) {
     setUsername(value);
@@ -154,10 +151,10 @@ export function AuthFlow() {
         <section className="animate-[rise-in_720ms_cubic-bezier(0.2,0.7,0.2,1)_both] self-center">
           <div className="max-w-[33rem]">
             <h1 className="max-w-[12ch] text-[clamp(3rem,7vw,5.25rem)] leading-[0.94] tracking-[-0.045em] text-[#0f1014] text-balance">
-              A clean workspace for serious chess preparation.
+              A chess community for review and explanation.
             </h1>
             <p className="mt-6 max-w-[30rem] text-[1.05rem] leading-[1.7] text-[var(--color-muted)]">
-              Welcome back. Log in to continue your prep.
+              Welcome back. Log in to continue your games, reviews, and community discussions.
             </p>
           </div>
         </section>
@@ -275,7 +272,7 @@ export function AuthFlow() {
           Welcome back
         </p>
         <p className="mt-3 text-[0.76rem] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
-          Loading your workspace
+          Opening your community space
         </p>
       </div>
     </main>

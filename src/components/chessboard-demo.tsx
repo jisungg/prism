@@ -190,19 +190,34 @@ function CustomPiece({
   color,
   type,
   isDragging,
+  isAnimating,
+  size,
 }: ChessPieceRendererProps) {
+  const label = {
+    king: "K",
+    queen: "Q",
+    rook: "R",
+    bishop: "B",
+    knight: "N",
+    pawn: "P",
+  }[type];
+
   return (
     <div
       className={[
-        "flex h-full w-full items-center justify-center rounded-full border transition-transform duration-150",
+        "flex h-full w-full items-center justify-center rounded-[28%] border transition-transform duration-150",
         color === "white"
-          ? "border-[#171717] bg-[#fffdf8] text-[#171717]"
-          : "border-[#f5f1e8] bg-[#171717] text-[#f5f1e8]",
+          ? "border-[#171717] bg-[linear-gradient(180deg,#fffcf6_0%,#f1e8db_100%)] text-[#171717]"
+          : "border-[#f5f1e8] bg-[linear-gradient(180deg,#232323_0%,#111114_100%)] text-[#f5f1e8]",
         isDragging ? "scale-[1.05]" : "scale-100",
+        isAnimating ? "shadow-[0_10px_24px_rgba(17,17,20,0.16)]" : "shadow-[0_4px_10px_rgba(17,17,20,0.12)]",
       ].join(" ")}
     >
-      <span className="text-[clamp(1rem,2.2vw,1.6rem)] font-semibold uppercase tracking-[-0.04em]">
-        {type[0]}
+      <span
+        className="font-semibold uppercase tracking-[-0.06em]"
+        style={{ fontSize: Math.max(18, size * 0.34) }}
+      >
+        {label}
       </span>
     </div>
   );
@@ -214,7 +229,7 @@ export function ChessboardDemo() {
   const [lastMove, setLastMove] = useState<Pick<ChessMove, "from" | "to"> | null>(null);
   const [orientation, setOrientation] = useState<BoardOrientation>("white");
   const [showCoordinates, setShowCoordinates] = useState(true);
-  const [useCustomPieces, setUseCustomPieces] = useState(false);
+  const [useCustomPieces, setUseCustomPieces] = useState(true);
 
   const legalMoves = useMemo(() => {
     if (!selectedSquare) {
@@ -235,7 +250,7 @@ export function ChessboardDemo() {
             Prism
           </p>
           <h1 className="text-[clamp(2.3rem,5vw,4.2rem)] leading-[0.95] tracking-[-0.06em] text-[#0f1014]">
-            Chessboard Core
+            Prism Board
           </h1>
         </div>
 
@@ -295,11 +310,22 @@ export function ChessboardDemo() {
             orientation={orientation}
             showCoordinates={showCoordinates}
             size={760}
+            animation={{
+              enabled: true,
+              durationMs: 180,
+              easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+            }}
             renderPiece={useCustomPieces ? (props) => <CustomPiece {...props} /> : undefined}
             theme={{
-              boardClassName: "shadow-[0_28px_80px_rgba(17,17,20,0.10)]",
-              focusedSquareClassName: "ring-2 ring-inset ring-[#111114]/22",
-              selectedSquareClassName: "shadow-[inset_0_0_0_2px_rgba(17,17,20,0.52)]",
+              boardClassName: "rounded-[1.65rem] border-black/8 bg-[#efe8dc] shadow-[0_28px_80px_rgba(17,17,20,0.10)]",
+              gridClassName: "overflow-hidden rounded-[1.5rem]",
+              lightSquareClassName: "bg-[#f6efe4]",
+              darkSquareClassName: "bg-[#dbcfbc]",
+              focusedSquareClassName: "ring-2 ring-inset ring-[#111114]/18",
+              selectedSquareClassName: "shadow-[inset_0_0_0_2px_rgba(17,17,20,0.58),inset_0_0_0_999px_rgba(17,17,20,0.03)]",
+              previewSquareClassName: "shadow-[inset_0_0_0_2px_rgba(17,17,20,0.18)]",
+              lastMoveClassName: "shadow-[inset_0_0_0_999px_rgba(0,113,227,0.10)]",
+              coordinatesClassName: "text-black/24",
             }}
           />
         </div>

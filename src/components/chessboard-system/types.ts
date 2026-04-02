@@ -36,6 +36,7 @@ export type SquareVisualState = {
   isDark: boolean;
   isSelected: boolean;
   isLegalTarget: boolean;
+  isPreview: boolean;
   isLastMove: boolean;
   isFocused: boolean;
   isOccupied: boolean;
@@ -57,6 +58,7 @@ export type ChessPieceRendererProps = {
   color: PieceColor;
   type: PieceKind;
   isDragging: boolean;
+  isAnimating: boolean;
   size: number;
   boardOrientation: BoardOrientation;
 };
@@ -117,6 +119,7 @@ export type ChessboardTheme = {
   darkSquareClassName?: string;
   selectedSquareClassName?: string;
   legalMoveClassName?: string;
+  previewSquareClassName?: string;
   lastMoveClassName?: string;
   focusedSquareClassName?: string;
   coordinatesClassName?: string;
@@ -132,6 +135,12 @@ export type ChessboardInteractionOptions = {
   enableDragToMove?: boolean;
   enableKeyboardNavigation?: boolean;
   enableTouchDrag?: boolean;
+};
+
+export type AnimationConfig = {
+  enabled?: boolean;
+  durationMs?: number;
+  easing?: string;
 };
 
 export type ChessboardProps = {
@@ -156,6 +165,7 @@ export type ChessboardProps = {
   pieceComponents?: PieceComponentMap;
   theme?: ChessboardTheme;
   interaction?: ChessboardInteractionOptions;
+  animation?: AnimationConfig;
   canMove?: (move: ChessMove, context: MoveValidationContext) => boolean;
   onSquareClick?: (event: ChessSquareClickEvent) => void;
   onPieceDrop?: (event: ChessPieceDropEvent) => void;
